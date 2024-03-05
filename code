@@ -1,7 +1,88 @@
-bd <- st_read(dsn = "Boundary.gpx", layer = "track_points")
-bd.area <- st_polygon(list(rbind(st_coordinates(bd),st_coordinates(bd)[1,])))
-bd.area <- st_buffer(bd.area, .00006)
-plot(bd.area)
+################################################################################
+################################ ACTIVITY 2 ####################################
+################################################################################
+
+library(XML)
+library(sp)
+library(leaflet)
+library(lubridate)
+library(gganimate)
+library(tidyverse)
+
+# Getting data
+setwd("~/OneDrive - Kansas State University/SPRING 2024/STAT 764/Activity 2")
+boundary <- htmlTreeParse(file = "Boundary.gpx", useInternalNodes = TRUE)
+inner1 <- htmlTreeParse(file = "Inner.gpx", useInternalNodes = TRUE)
+inner2 <- htmlTreeParse(file = "2024-03-02T223058Z.gpx", useInternalNodes = TRUE)
+
+## Boundary
+coords <- xpathSApply(doc = boundary, path = "//trkpt", fun = xmlAttrs)
+elevation <- xpathSApply(doc = boundary, path = "//trkpt/ele", fun = xmlValue)
+
+bd <- data.frame(
+  lat = as.numeric(coords["lat", ]),
+  lon = as.numeric(coords["lon", ]),
+  elevation = as.numeric(elevation))
+
+plot(bd)
+
+## Inner
+### Inner 1
+coords <- xpathSApply(doc = inner1, path = "//trkpt", fun = xmlAttrs)
+elevation <- xpathSApply(doc = inner1, path = "//trkpt/ele", fun = xmlValue)
+
+inner1 <- data.frame(
+  lat = as.numeric(coords["lat", ]),
+  lon = as.numeric(coords["lon", ]),
+  elevation = as.numeric(elevation))
+
+### Inner 2
+coords <- xpathSApply(doc = inner2, path = "//trkpt", fun = xmlAttrs)
+elevation <- xpathSApply(doc = inner2, path = "//trkpt/ele", fun = xmlValue)
+
+inner2 <- data.frame(
+  lat = as.numeric(coords["lat", ]),
+  lon = as.numeric(coords["lon", ]),
+  elevation = as.numeric(elevation))
+
+inner <- rbind(inner1, inner2)
+
+plot(inner$lat, inner$lon)
+
+# Plotting data
+leaflet(inner) %>% 
+  addCircleMarkers(radius = 1,
+                   color = "#512888") %>% 
+  addTiles()
+
+# API key
+library(ggmap)
+register_stadiamaps("15a9bb13-20bb-4bde-a2a4-a69e08500425")
+
+
+basemap <- get_stadiamap(bbox = c(left = min(inner$lon)-0.001,
+                                  bottom = min(inner$lat)-0.001,
+                                  right = max(inner$lon)+0.001,
+                                  top = max(inner$lat)+0.001),
+                         zoom = 18)
+
+# Visualizing boundaries
+ggmap(basemap)
+
+# Checking coordinates
+ggmap(basemap) +
+  geom_point(data = inner, aes(x = lon, y = lat, color = elevation, size = elevation)) +
+  geom_path(data = bd, aes(x = lon, y = lat, color = elevation))+
+  scale_color_distiller(type = "seq", palette = "Spectral")
+
+
+
+### Actual packages
+library(sf)
+library(sp)
+library(raster)
+library(nlme)
+library(fields)
 
 inner1.elev <- st_read(dsn= "Inner.gpx",layer= "track_points")
 inner1.elev <- inner1.elev[,4]
@@ -12,5 +93,63 @@ inner2.elev <- inner2.elev[,4]
 inner <- rbind(inner1.elev, inner2.elev)
 class(inner)
 
+hist(inner$ele,col="grey")
+summary(inner$ele)
+
+elev.utm <- st_transform(inner,CRS("+proj=utm +zone=14 +datum=WGS84  +units=m"))
+
+bd <- st_read(dsn = "Boundary.gpx", layer = "track_points")
+bd.area <- st_polygon(list(rbind(st_coordinates(bd),st_coordinates(bd)[1,])))
+bd.area <- st_buffer(bd.area, .00006)
+bd.area <- st_sf(st_sfc(bd.area), crs = crs(inner))
+plot(bd.area)
+
+bd.utm <- st_transform(bd.area,CRS("+proj=utm +zone=14 +datum=WGS84  +units=m"))
+
 plot(bd.area)
 plot(inner,add=TRUE)
+
+df.elev <- data.frame (rf = inner$ele,
+                       long = st_coordinates(inner)[,1],
+                       lat = st_coordinates(inner)[,2],
+                       s1 = st_coordinates(elev.utm)[,1],
+                       s2 = st_coordinates(elev.utm)[,2])
+
+
+### MODEL ###
+m1 <- lm(rf~s1+I(s1^2)+s2+I(s2^2),data=df.elev)
+
+
+# Make raster of study area to be able to map predictions from m1
+rl.E.y <- raster(,nrow=100,ncols=100,ext=extent(bd.utm),crs=crs(bd.utm))
+
+
+# Make data.frame to be able to make predictions at each pixel (cell of raster)
+df.pred <- data.frame(elev = NA,
+                      s1 = xyFromCell(rl.E.y,cell=1:length(rl.E.y[]))[,1],
+                      s2 = xyFromCell(rl.E.y,cell=1:length(rl.E.y[]))[,2])
+
+# Make spatial predictions at each pixel
+df.pred$elev <- predict(m1,newdata=df.pred) 
+
+# View first 6 rows of predictions
+head(df.pred) 
+
+# Fill raster file with predictions 
+rl.E.y[] <- df.pred$elev
+
+rl.E.y <- mask(rl.E.y,bd.utm)
+
+# Plot map of predictions
+plot(rl.E.y)
+plot(bd.utm,add=TRUE)
+
+# Estimate coordinates and amount of maximum precipitation
+xyFromCell(rl.E.y,cell=which.max(rl.E.y[]))
+
+rl.E.y[which.max(rl.E.y[])]
+
+# Plot estimate coordinates of maximum precipitation
+points(xyFromCell(rl.E.y,cell=which.max(rl.E.y[])),col="purple",pch="*",cex=3)
+
+
