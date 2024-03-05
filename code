@@ -1,0 +1,50 @@
+library(XML)
+library(sp)
+library(leaflet)
+library(lubridate)
+library(gganimate)
+library(tidyverse)
+
+# Getting data
+setwd("~/OneDrive - Kansas State University/SPRING 2024/STAT 764/Activity 2")
+boundary <- htmlTreeParse(file = "Boundary.gpx", useInternalNodes = TRUE)
+inner1 <- htmlTreeParse(file = "Inner.gpx", useInternalNodes = TRUE)
+inner2 <- htmlTreeParse(file = "2024-03-02T223058Z.gpx", useInternalNodes = TRUE)
+
+## Boundary
+coords <- xpathSApply(doc = boundary, path = "//trkpt", fun = xmlAttrs)
+elevation <- xpathSApply(doc = boundary, path = "//trkpt/ele", fun = xmlValue)
+
+bd <- data.frame(
+  lat = as.numeric(coords["lat", ]),
+  lon = as.numeric(coords["lon", ]),
+  elevation = as.numeric(elevation))
+
+## Inner
+### Inner 1
+coords <- xpathSApply(doc = inner1, path = "//trkpt", fun = xmlAttrs)
+elevation <- xpathSApply(doc = inner1, path = "//trkpt/ele", fun = xmlValue)
+
+inner1 <- data.frame(
+  lat = as.numeric(coords["lat", ]),
+  lon = as.numeric(coords["lon", ]),
+  elevation = as.numeric(elevation))
+
+### Inner 2
+coords <- xpathSApply(doc = inner2, path = "//trkpt", fun = xmlAttrs)
+elevation <- xpathSApply(doc = inner2, path = "//trkpt/ele", fun = xmlValue)
+
+inner2 <- data.frame(
+  lat = as.numeric(coords["lat", ]),
+  lon = as.numeric(coords["lon", ]),
+  elevation = as.numeric(elevation))
+
+inner <- rbind(inner1, inner2)
+
+plot(inner$lat, inner$lon)
+
+# Plotting data
+leaflet(inner) %>% 
+  addCircleMarkers(radius = 1,
+                   color = "#512888") %>% 
+  addTiles()
