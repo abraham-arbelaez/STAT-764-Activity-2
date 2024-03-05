@@ -1,50 +1,16 @@
-library(XML)
-library(sp)
-library(leaflet)
-library(lubridate)
-library(gganimate)
-library(tidyverse)
+bd <- st_read(dsn = "Boundary.gpx", layer = "track_points")
+bd.area <- st_polygon(list(rbind(st_coordinates(bd),st_coordinates(bd)[1,])))
+bd.area <- st_buffer(bd.area, .00006)
+plot(bd.area)
 
-# Getting data
-setwd("~/OneDrive - Kansas State University/SPRING 2024/STAT 764/Activity 2")
-boundary <- htmlTreeParse(file = "Boundary.gpx", useInternalNodes = TRUE)
-inner1 <- htmlTreeParse(file = "Inner.gpx", useInternalNodes = TRUE)
-inner2 <- htmlTreeParse(file = "2024-03-02T223058Z.gpx", useInternalNodes = TRUE)
+inner1.elev <- st_read(dsn= "Inner.gpx",layer= "track_points")
+inner1.elev <- inner1.elev[,4]
 
-## Boundary
-coords <- xpathSApply(doc = boundary, path = "//trkpt", fun = xmlAttrs)
-elevation <- xpathSApply(doc = boundary, path = "//trkpt/ele", fun = xmlValue)
+inner2.elev <- st_read(dsn = "2024-03-02T223058Z.gpx", layer = "track_points")
+inner2.elev <- inner2.elev[,4]
 
-bd <- data.frame(
-  lat = as.numeric(coords["lat", ]),
-  lon = as.numeric(coords["lon", ]),
-  elevation = as.numeric(elevation))
+inner <- rbind(inner1.elev, inner2.elev)
+class(inner)
 
-## Inner
-### Inner 1
-coords <- xpathSApply(doc = inner1, path = "//trkpt", fun = xmlAttrs)
-elevation <- xpathSApply(doc = inner1, path = "//trkpt/ele", fun = xmlValue)
-
-inner1 <- data.frame(
-  lat = as.numeric(coords["lat", ]),
-  lon = as.numeric(coords["lon", ]),
-  elevation = as.numeric(elevation))
-
-### Inner 2
-coords <- xpathSApply(doc = inner2, path = "//trkpt", fun = xmlAttrs)
-elevation <- xpathSApply(doc = inner2, path = "//trkpt/ele", fun = xmlValue)
-
-inner2 <- data.frame(
-  lat = as.numeric(coords["lat", ]),
-  lon = as.numeric(coords["lon", ]),
-  elevation = as.numeric(elevation))
-
-inner <- rbind(inner1, inner2)
-
-plot(inner$lat, inner$lon)
-
-# Plotting data
-leaflet(inner) %>% 
-  addCircleMarkers(radius = 1,
-                   color = "#512888") %>% 
-  addTiles()
+plot(bd.area)
+plot(inner,add=TRUE)
